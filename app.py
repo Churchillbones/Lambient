@@ -58,42 +58,44 @@ def main():
     try:
         # Get configuration from sidebar
         # This function now resides in ui_components
-        # Returns: (api_key, endpoint, api_version, model_name, asr_model_info, use_local_llm, local_llm_model, use_encryption)
+        # Returns: (api_key, endpoint, api_version, model_name, asr_model_info, use_local_llm, local_llm_model, use_encryption, language)
         (azure_api_key, azure_endpoint, azure_api_version, azure_model_name, 
-         asr_model_info, use_local_llm, local_llm_model, use_encryption) = render_sidebar()
-
+         asr_model_info, use_local_llm, local_llm_model, use_encryption, language) = render_sidebar()
+         
         # Create tabs for different functionalities
         tab_titles = ["Record Audio", "Upload Audio", "View Transcription", "Model Comparison"]
         # Use st.tabs for a cleaner look
         tab1, tab2, tab3, tab4 = st.tabs(tab_titles)
-
+        
         with tab1:
             st.header("Record & Generate Note")
             # Pass all relevant config down
             render_recording_section(
                 azure_api_key, azure_endpoint, azure_api_version, azure_model_name,
-                asr_model_info, use_local_llm, local_llm_model, use_encryption
+                asr_model_info, use_local_llm, local_llm_model, use_encryption,
+                language
             )
-
+            
         with tab2:
             st.header("Upload & Generate Note")
             # Pass all relevant config down
             render_upload_section(
                 azure_api_key, azure_endpoint, azure_api_version, azure_model_name,
-                asr_model_info, use_local_llm, local_llm_model, use_encryption
+                asr_model_info, use_local_llm, local_llm_model, use_encryption,
+                language
             ) # Upload section has its own encryption toggle
-
+            
         with tab3:
             st.header("View Transcription")
             # Pass necessary config for ASR and diarization
             render_view_transcription_section(
                 azure_api_key, azure_endpoint, azure_api_version, azure_model_name,
-                asr_model_info
+                asr_model_info, language
             )
 
         with tab4:
             st.header("Compare ASR Models")
-            render_model_comparison_section(asr_model_info)
+            render_model_comparison_section(asr_model_info, language)
 
     except FileNotFoundError as e:
          logger.error(f"File not found error in main app: {e}")

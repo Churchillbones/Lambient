@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Dict
+import streamlit as st # Added for caching
 
 # Import the full config object rather than just the logger
 from .config import config, logger
@@ -95,6 +96,7 @@ TEMPLATE_SUGGESTIONS = {
 }
 
 
+@st.cache_data
 def load_prompt_templates() -> Dict[str, str]:
     """Load prompt templates from JSON file, falling back to defaults."""
     prompt_file = config["PROMPT_STORE"]
@@ -131,6 +133,7 @@ def save_custom_template(name: str, template: str) -> bool:
         return False
 
     prompt_file = config["PROMPT_STORE"]
+    success = False
     try:
         # Load existing templates (use load function to handle file creation/errors)
         templates = load_prompt_templates()
@@ -143,10 +146,15 @@ def save_custom_template(name: str, template: str) -> bool:
             json.dump(templates, f, indent=4) # Use indent for readability
 
         logger.info(f"Saved/Updated custom template: '{name}' in {prompt_file}")
-        return True
+        success = True
     except Exception as e:
         logger.error(f"Failed to save template '{name}' to {prompt_file}: {e}")
-        return False
+        success = False
+    
+    if success:
+        load_prompt_templates.clear() # Clear the cache after a successful save
+
+    return success
 
 
 def load_template_suggestions() -> Dict[str, str]:

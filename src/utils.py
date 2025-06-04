@@ -6,6 +6,11 @@ from contextlib import contextmanager
 from pathlib import Path
 import bleach
 import pyaudio
+from typing import List, Dict, Any, Union
+try:
+    import numpy as np
+except ImportError:
+    np = None
 from .config import config, logger # Import config and logger from the same package
 
 # --- Utility Functions ---
@@ -154,3 +159,115 @@ def monitor_resources():
         def dummy_results():
             return {"cpu_avg": 0, "memory_avg": 0, "peak_memory": 0}
         return dummy_measure, dummy_results
+
+# --- Embedding Utilities ---
+try:
+    from .embedding_service import EmbeddingService
+except ImportError:
+    logger.warning("EmbeddingService module not found. Embedding features will be unavailable.")
+    EmbeddingService = None
+
+def get_embedding_service(api_key: str = None, endpoint: str = None, api_version: str = "2025-01-01-preview", verify_ssl: bool = False):
+    """Get properly configured embedding service instance"""
+    if EmbeddingService is None:
+        logger.error("EmbeddingService module not available")
+        return None
+        
+    if not api_key:
+        # Try to get from config
+        api_key = config.get("OPENAI_API_KEY", "")
+    
+    if not endpoint:
+        # Use default VA endpoint
+        endpoint = "https://va-east-apim.devtest.spd.vaec.va.gov/openai/deployments/text-embedding-3-large/embeddings"
+    
+    return EmbeddingService(api_key, endpoint, api_version, verify_ssl)
+
+def semantic_chunking(text: str, max_tokens: int = 1000, min_chunk_size: int = 200) -> List[str]:
+    """Chunk text into semantic units rather than arbitrary splits"""
+    # 1. Split into sentences or paragraphs
+    import re
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    
+    # 2. Create chunks that respect semantic boundaries
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for sentence in sentences:
+        # Estimate token count - roughly 4 chars per token
+        sentence_length = len(sentence) // 4
+        
+        # If adding this sentence would exceed max_tokens, start a new chunk
+        if current_length + sentence_length > max_tokens and current_length >= min_chunk_size:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [sentence]
+            current_length = sentence_length
+        else:
+            current_chunk.append(sentence)
+            current_length += sentence_length
+    
+    # Add the last chunk if not empty
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+    
+    return chunks
+
+def find_similar_chunks(chunks: List[str], embedding_service, 
+                        target_index: int, top_k: int = 2) -> List[int]:
+    """Find chunks most similar to the target chunk"""
+    if not embedding_service:
+        logger.warning("Embedding service not available, cannot find similar chunks")
+        return []
+        
+    # Get embeddings for all chunks
+    embeddings = embedding_service.get_batch_embeddings(chunks)
+    
+    # Calculate similarity between target and all other chunks
+    target_embedding = embeddings[target_index]
+    similarities = []
+    
+    for i, emb in enumerate(embeddings):
+        if i == target_index:
+            continue  # Skip self
+        sim = embedding_service.cosine_similarity(target_embedding, emb)
+        similarities.append((i, sim))
+    
+    # Sort by similarity and get top_k indices
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    return [idx for idx, _ in similarities[:top_k]]
+
+def cluster_by_topic(chunks: List[str], embedding_service, 
+                     num_clusters: int = 5) -> Dict[int, List[int]]:
+    """Cluster chunks by topic similarity"""
+    if not embedding_service:
+        logger.warning("Embedding service not available, cannot cluster by topic")
+        return {0: list(range(len(chunks)))}
+        
+    # This requires scikit-learn
+    try:
+        from sklearn.cluster import KMeans
+        
+        # Get embeddings
+        embeddings = embedding_service.get_batch_embeddings(chunks)
+        
+        # Convert to numpy array
+        embeddings_array = np.array(embeddings)
+        
+        # Perform K-means clustering
+        kmeans = KMeans(n_clusters=min(num_clusters, len(chunks)), random_state=42)
+        clusters = kmeans.fit_predict(embeddings_array)
+        
+        # Group chunk indices by cluster
+        cluster_map = {}
+        for i, cluster_id in enumerate(clusters):
+            if cluster_id not in cluster_map:
+                cluster_map[cluster_id] = []
+            cluster_map[cluster_id].append(i)
+        
+        return cluster_map
+        
+    except ImportError:
+        logger.warning("scikit-learn not available for clustering")
+        # Fallback to simple chunking
+        return {0: list(range(len(chunks)))}

@@ -8,7 +8,7 @@ from .utils import sanitize_input # Import from utils
 # --- Speaker Diarization ---
 
 def apply_speaker_diarization(transcript: str) -> str:
-    """Apply simple alternating speaker diarization (Doctor/Patient)."""
+    """Apply simple alternating speaker diarization (User/Patient)."""
     if not transcript:
         return ""
 
@@ -17,7 +17,7 @@ def apply_speaker_diarization(transcript: str) -> str:
     lines = re.split(r'(?<=[.!?])\s+', transcript) # Split after sentence-ending punctuation
 
     processed_lines = []
-    current_speaker_index = 0 # Start with Doctor
+    current_speaker_index = 0 # Start with User
 
     for line in lines:
         line = line.strip()
@@ -29,7 +29,7 @@ def apply_speaker_diarization(transcript: str) -> str:
         # A better approach might involve looking for keywords or using a more sophisticated model.
         # For now, stick to simple alternation.
 
-        speaker = "Doctor" if current_speaker_index % 2 == 0 else "Patient"
+        speaker = "User" if current_speaker_index % 2 == 0 else "Patient"
         processed_lines.append(f"{speaker}: {line}")
 
         # Only increment speaker index if the line seems substantial enough
@@ -65,7 +65,7 @@ async def generate_gpt_speaker_tags(transcript: str, api_key: Optional[str],
 
         # Improved prompt for better speaker tagging
         prompt = (
-            "System: You are an expert medical transcript editor. Your task is to accurately assign speaker roles (Doctor or Patient) "
+            "System: You are an expert medical transcript editor. Your task is to accurately assign speaker roles (User or Patient) "
             "to each utterance in the provided clinical conversation transcript. Maintain the original wording. "
             "Format each utterance clearly as 'Speaker: Text'. If unsure, use 'Unknown Speaker:'.\n\n"
             "TRANSCRIPT:\n"
@@ -85,8 +85,8 @@ async def generate_gpt_speaker_tags(transcript: str, api_key: Optional[str],
         tagged_transcript = response.choices[0].message.content
         logger.info("Successfully received speaker tags from Azure OpenAI.")
         # Basic validation: Check if the output contains expected speaker tags
-        if "Doctor:" not in tagged_transcript and "Patient:" not in tagged_transcript:
-             logger.warning("GPT output did not contain expected 'Doctor:' or 'Patient:' tags. Returning original with basic diarization.")
+        if "User:" not in tagged_transcript and "Patient:" not in tagged_transcript:
+             logger.warning("GPT output did not contain expected 'User:' or 'Patient:' tags. Returning original with basic diarization.")
              return apply_speaker_diarization(transcript) # Fallback
 
         return tagged_transcript.strip()

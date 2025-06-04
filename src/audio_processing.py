@@ -274,10 +274,16 @@ def live_azure_callback(api_key: str, endpoint: str, update_queue: queue.Queue):
                     'Content-Type': 'audio/wav'
                 }
                 
-                # Send request to Azure
+                # Create parameters object with proper language parameter
+                params = {
+                    'language': 'en-US'  # Explicitly set language to en-US
+                }
+                
+                # Send request to Azure with language parameter
                 response = requests.post(
                     request_url,
                     headers=headers,
+                    params=params,
                     data=wav_buffer.getvalue()
                 )
                 
@@ -416,8 +422,8 @@ def convert_to_wav(in_path: str | Path) -> str:
         import subprocess
         subprocess.run(cmd, check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        logger.info(f"ffmpeg conversion → {out_path}")
+        logger.info(f"ffmpeg conversion ? {out_path}")
         return out_path
     except subprocess.CalledProcessError as e:
         logger.error(f"ffmpeg failed: {e.stderr.decode(errors='ignore')}")
-        raise RuntimeError("Audio conversion failed — see logs.") from e
+        raise RuntimeError("Audio conversion failed - see logs.") from e

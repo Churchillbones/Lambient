@@ -2,9 +2,15 @@ import asyncio
 import requests
 from typing import Optional, Dict, Tuple, List
 from openai import AzureOpenAI, OpenAIError
+import streamlit as st
 
 from .config import config, logger
 from .utils import sanitize_input
+from .token_management import (
+    count_tokens, 
+    generate_note_from_chunked_transcript, 
+    generate_note_with_two_stage_summarization
+)
 
 # --- Transcription Cleanup ---
 async def clean_transcription(
@@ -213,7 +219,6 @@ async def generate_note(
 
 
     logger.debug(f"Final prompt for note generation (first 100 chars): {prompt[:100]}...")
-
     try:
         if use_local:
             # --- Use local LLM model API ---
@@ -270,11 +275,53 @@ async def generate_note(
             if not azure_endpoint or not azure_api_version or not azure_model_name:
                  logger.error("Azure endpoint, version, or model name missing for note generation.")
                  return "Error: Azure configuration incomplete."
-
+                 
+            # Get token count for transcript to determine approach
+            transcript_tokens = count_tokens(sanitized_transcript, "gpt-4o")
+            logger.info(f"Transcript token count: {transcript_tokens}")
+            
+            # Use token management strategies for large transcripts
+            if transcript_tokens > 2500:                # Choose which approach to use based on configuration
+                token_management_approach = config.get("TOKEN_MANAGEMENT_APPROACH", "chunking")
+                
+                if token_management_approach == "chunking":
+                    logger.info(f"🧩 TOKEN MANAGEMENT: Using chunk processing for large transcript ({transcript_tokens} tokens)")
+                    st.info(f"🧩 Using chunk processing strategy for large transcript ({transcript_tokens} tokens)")
+                    # Use synchronous function with asyncio.to_thread
+                    note = await asyncio.to_thread(
+                        lambda: generate_note_from_chunked_transcript(
+                            transcript=sanitized_transcript,
+                            prompt_template=final_prompt_template,
+                            azure_endpoint=azure_endpoint,
+                            azure_api_key=api_key,
+                            deployment_name=azure_model_name,
+                            api_version=azure_api_version,
+                            model="gpt-4o"
+                        )
+                    )
+                    return note
+                else:
+                    logger.info(f"📝 TOKEN MANAGEMENT: Using two-stage summarization for large transcript ({transcript_tokens} tokens)")
+                    st.info(f"📝 Using two-stage summarization strategy for large transcript ({transcript_tokens} tokens)")
+                    # Use synchronous function with asyncio.to_thread
+                    note = await asyncio.to_thread(
+                        lambda: generate_note_with_two_stage_summarization(
+                            transcript=sanitized_transcript,
+                            prompt_template=final_prompt_template,
+                            azure_endpoint=azure_endpoint,
+                            azure_api_key=api_key,
+                            deployment_name=azure_model_name,
+                            api_version=azure_api_version,
+                            model="gpt-4o"
+                        )
+                    )
+                    return note
+            
+            # For smaller transcripts, use the standard approach
             client = AzureOpenAI(
                 api_key=api_key,
-                api_version=azure_api_version, # Use passed param
-                azure_endpoint=azure_endpoint, # Use passed param
+                api_version=azure_api_version,
+                azure_endpoint=azure_endpoint,
                 timeout=60.0 # Increased timeout
             )
 
@@ -282,10 +329,10 @@ async def generate_note(
             # Use asyncio.to_thread for the blocking SDK call
             response = await asyncio.to_thread(
                 lambda: client.chat.completions.create(
-                    model=azure_model_name, # Use passed param
+                    model=azure_model_name,
                     messages=[{"role": "system", "content": prompt}],
-                    temperature=0.3, # Adjust temperature for clinical note generation
-                    max_tokens=max(1000, int(len(prompt.split()) * 1.5)) # Generous token limit
+                    temperature=0.3,
+                    max_tokens=3000  # Safe token limit for smaller transcripts
                 )
             )
 
@@ -360,8 +407,8 @@ async def generate_gpt_speaker_tags(
 
     prompt = (
         "Analyze the following medical conversation transcript and identify the speakers "
-        "(e.g., 'Doctor', 'Patient', 'Nurse'). Prefix each utterance with the identified speaker label "
-        "followed by a colon (e.g., 'Doctor: How are you feeling today?'). Maintain the original transcript content accurately.\n\n"
+        "(e.g., 'User', 'Patient', 'Nurse'). Prefix each utterance with the identified speaker label "
+        "followed by a colon (e.g., 'User: How are you feeling today?'). Maintain the original transcript content accurately.\n\n"
         "TRANSCRIPT:\n"
         f"{sanitized_transcript}"
     )

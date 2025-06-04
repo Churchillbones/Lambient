@@ -8,10 +8,37 @@ import os, logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-# ───────────────────────────── load .env
+# ----------------------------- load .env
 load_dotenv()
 
-# ───────────────────────────── configuration dict
+# ----------------------------- logging
+log_level = logging.DEBUG if os.getenv("DEBUG_MODE", "False").lower() == "true" else logging.INFO
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("ambient_scribe")
+logger.info("Configuration loaded.")
+
+# Add logging to debug environment variable loading
+debug_logger = logging.getLogger(__name__)
+debug_logger.setLevel(logging.DEBUG)
+
+# Ensure a handler is added to avoid missing logs
+if not debug_logger.hasHandlers():
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    debug_logger.addHandler(handler)
+
+# Log the loaded environment variables
+debug_logger.debug(f"Azure Speech Key: {os.getenv('AZURE_SPEECH_API_KEY')}")
+debug_logger.debug(f"Azure Speech Endpoint: {os.getenv('AZURE_SPEECH_ENDPOINT')}")
+debug_logger.debug(f"Azure OpenAI Key: {os.getenv('AZURE_API_KEY')}")
+debug_logger.debug(f"Azure OpenAI Endpoint: {os.getenv('AZURE_ENDPOINT')}")
+
+# ----------------------------- configuration dict
 config: dict[str, object] = {
     # Azure credentials
     "AZURE_API_KEY": os.getenv("AZURE_API_KEY") or os.getenv("AZURE_OPENAI_API_KEY"),
@@ -41,6 +68,9 @@ config: dict[str, object] = {
     "BASE_DIR":           Path("./app_data"),
     "LOCAL_MODELS_DIR":   Path("./local_llm_models"),
 
+    # Token management for OpenAI API calls
+    "TOKEN_MANAGEMENT_APPROACH": os.getenv("TOKEN_MANAGEMENT_APPROACH", "chunking"),  # "chunking" or "two_stage"
+    
     # Whisper open-source settings
     "USE_WHISPER":        os.getenv("USE_WHISPER", "False").lower() == "true",
     "WHISPER_MODEL_SIZE": os.getenv("WHISPER_MODEL_SIZE", "tiny"),
@@ -71,17 +101,7 @@ for d in (
 ):
     Path(d).mkdir(parents=True, exist_ok=True)
 
-# ───────────────────────────── logging
-log_level = logging.DEBUG if config["DEBUG_MODE"] else logging.INFO
-logging.basicConfig(
-    filename=config["LOG_DIR"] / "app.log",
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("ambient_scribe")
-logger.info("Configuration loaded.")
-
-# ───────────────────────────── expose key paths for "from config import MODEL_DIR"
+# ----------------------------- expose key paths for "from config import MODEL_DIR"
 MODEL_DIR            = config["MODEL_DIR"]
 KEY_DIR              = config["KEY_DIR"]
 LOG_DIR              = config["LOG_DIR"]
