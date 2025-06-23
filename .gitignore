@@ -1,32 +1,425 @@
-# Ignore everything
-*
+# =============================================================================
+# Python .gitignore for Ambient Transcription with GPT Note Creation
+# =============================================================================
 
-# But not these files...
-!.gitignore
-!LICENSE
-!README.md
-!requirements.txt
-!ollama_bridge.py
-!setup.bat
-!Start_app.bat
-!models_map.py
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.coverage
+cov.xml
+htmlcov/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# =============================================================================
+# Node.js / Angular (Frontend)
+# =============================================================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Angular build output
+dist/
+tmp/
+out-tsc/
+
+# Angular cache
+.angular/
+.nx/cache/
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/
+
+# Misc
+.sass-cache/
+connect.lock
+typings/
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# =============================================================================
+# Application-specific
+# =============================================================================
+
+# Audio files (can be large)
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.ogg
+*.wma
+audio_samples/
+recordings/
+temp_audio/
+
+# Model files (very large)
+models/
+*.model
+vosk-model*/
+whisper-models/
+
+# Logs
+logs/
+*.log
+app.log
+transcription.log
+error.log
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.temp
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+database/
+
+# Configuration with sensitive data
+config/secrets.yaml
+config/production.yaml
+secrets.json
+*.key
+*.pem
+*.crt
+
+# API keys and credentials (be extra careful)
+*api_key*
+*secret*
+*password*
+*token*
+credentials.json
+service-account.json
+
+# =============================================================================
+# Development & Testing
+# =============================================================================
+
+# Test results
+test-results/
+test_results/
+junit.xml
+test-reports/
+
+# Performance benchmark results
+benchmark.json
+benchmark_results/
+performance_logs/
+
+# Mock data (keep small test fixtures, ignore large mock files)
+tests/fixtures/audio_samples/*.wav
+tests/fixtures/audio_samples/*.mp3
+tests/mock_data/large/
+
+# Local development files
+local_config.yaml
+local_settings.py
+.local/
+
+# =============================================================================
+# Docker & Deployment
+# =============================================================================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Kubernetes
+k8s-local/
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# =============================================================================
+# OS & IDE specific
+# =============================================================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.nfs*
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# =============================================================================
+# CI/CD & GitHub Actions
+# =============================================================================
+
+# Keep GitHub workflows
+!.github/
+!.github/workflows/
+!.github/workflows/*
+
+# Keep pre-commit config
+!.pre-commit-config.yaml
+
+# =============================================================================
+# Project Documentation
+# =============================================================================
+
+# Keep all markdown files and documentation
+!*.md
+!docs/
+!docs/**
+!plans/
+!plans/**
+
+# =============================================================================
+# IMPORTANT: Include all source code and configurations
+# =============================================================================
+
+# Ensure all source code is included
+!src/
+!src/**
+
+# Ensure all backend code is included
 !backend/
 !backend/**
+
+# Ensure all frontend code is included
 !frontend/
 !frontend/**
 
-# And not this directory and its contents
-!src/
-!src/**/*
+# Ensure all tests are included
+!tests/
+!tests/**
 
-# Still ignore Python cache files everywhere
-**/__pycache__/
-**/*.py[cod]
-**/*.so
+# Ensure configuration files are included (but not secrets)
+!*.yaml
+!*.yml
+!*.json
+!*.toml
+!pyproject.toml
+!setup.py
+!setup.cfg
+!requirements.txt
+!requirements-dev.txt
+!Pipfile
+
+# Ensure scripts are included
+!*.bat
+!*.sh
+!*.ps1
+
+# Ensure Docker files are included
+!Dockerfile*
+!docker-compose.yml
+!docker-compose.yaml
+
+# =============================================================================
+# Legacy and backup files to ignore
+# =============================================================================
+
+# Old versions and backups
 **/Original_app.py
-**/*.zip
+*.backup
+*.bak
+*.old
+*_backup
+*_old
+*.orig
 
-# Environment variables & secrets
-.env
-*.env
-*.key
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# =============================================================================
+# Override: Never ignore these critical files
+# =============================================================================
+
+# Core application files
+!.gitignore
+!LICENSE
+!README.md
+!COMPREHENSIVE_REFACTORING_PLAN.md
+!PHASE_COMPLETION_SUMMARY.md
+
+# Build and dependency files
+!requirements.txt
+!package.json
+!package-lock.json
+
+# Application entry points
+!ollama_bridge.py
+!test_imports.py
+!models_map.py

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+# Re-export all exceptions from the new exceptions module for backward compatibility
+from .exceptions import *  # noqa: F403, F401
 
 __all__ = [
     "AmbientScribeError",

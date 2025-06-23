@@ -1,0 +1,25 @@
+[tool.black]
+line-length = 88
+skip-string-normalization = true
+target-version = ["py311"]
+
+[tool.ruff]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "B",  # flake8-bugbear
+  "I",  # isort
+  "UP", # pyupgrade
+  "S",  # flake8-bandit security rules
+  "N",  # pep8-naming
+  "C4", # flake8-comprehensions
+  "D",  # pydocstyle (docstrings)
+  "PL", # pylint-port
+]
+ignore = ["E501"]  # handled by Black
+line-length = 88
+src = ["src", "backend", "tests"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta" 

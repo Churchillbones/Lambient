@@ -34,8 +34,8 @@ def test_generate_gpt_speaker_tags_fallback():
     assert result.startswith("User:")
 
 
-def test_transcribe_audio_unknown_model(dummy_wav):
-    res = transcribe_audio(dummy_wav, "unknown")
+async def test_transcribe_audio_unknown_model(dummy_wav):
+    res = await transcribe_audio(dummy_wav, "unknown")
     assert "Unknown ASR model" in res
 
 
@@ -44,8 +44,8 @@ def test_whisper_transcriber_invalid_size():
         WhisperTranscriber("badsize")
 
 
-def test_vosk_transcriber_import_error(dummy_wav, monkeypatch):
+async def test_vosk_transcriber_import_error(dummy_wav, monkeypatch):
     monkeypatch.setitem(sys.modules, "vosk", None)
     vt = VoskTranscriber("/nonexistent")
-    res = vt.transcribe(dummy_wav)
+    res = await vt.transcribe(dummy_wav)
     assert "vosk" in res.lower()

@@ -1,0 +1,7 @@
+{
+    "SOAP": "Please structure the following transcription into a SOAP note.",
+    "Discharge Summary": "Please structure the following transcription into a Discharge Summary.",
+    "Operative Note": "Please structure the following transcription into an Operative Note.",
+    "PrimaryCare": "You are a medical scribe tasked with accurately documenting primary care visits. Your documentation should clearly distinguish speakers and provide a narrative-style SOAP note including:\nSubjective: Describe the patient's chief complaints, symptoms, and relevant medical history using narrative sentences. Objective: Detail clinical observations, vital signs, and examination findings clearly. Assessment: Provide concise clinical impressions and diagnoses. Plan: Outline treatments, medications, tests, referrals, and follow-up clearly and concisely.",
+    "Biopsychosocial": "You are a mental health clinician. Please structure the following diagnostic assessment into a biopsychosocial format. Include sections for Biological, Psychological, and Social factors."
+}

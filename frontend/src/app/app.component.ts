@@ -1,11 +1,15 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { interval, Subscription } from 'rxjs';
 import { TranscriptionService, NoteRequest } from './transcription.service';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { of, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 
 interface Config {
   azureApiKey: string;
   azureEndpoint: string;
+  azureApiVersion: string;
   noteModel: string;
   localModel: string;
   asrEngine: string;
@@ -13,6 +17,8 @@ interface Config {
   whisperModel: string;
   encryptRecordings: boolean;
   selectedTemplate: string;
+  useAgentPipeline: boolean;
+  agentSettings: string;
 }
 
 interface ComparisonModel {
@@ -37,19 +43,132 @@ export class AppComponent implements OnInit, OnDestroy {
   currentStep = 0;
   showResults = false;
 
-  // Template options
-  templateOptions = [
-    { value: 'SOAP', label: 'SOAP Note', description: 'Standard Subjective, Objective, Assessment, Plan' },
-    { value: 'PrimaryCare', label: 'Primary Care Visit', description: 'Comprehensive primary care documentation' },
-    { value: 'Psychiatric Assessment', label: 'Psychiatric Assessment', description: 'Mental health evaluation with MSE and risk assessment' },
-    { value: 'Discharge Summary', label: 'Discharge Summary', description: 'Hospital discharge documentation' },
-    { value: 'Operative Note', label: 'Operative Note', description: 'Surgical procedure documentation' },
-    { value: 'Biopsychosocial', label: 'Biopsychosocial Assessment', description: 'Mental health biopsychosocial format' },
-    { value: 'Consultation Note', label: 'Consultation Note', description: 'Specialist consultation documentation' },
-    { value: 'Well-Child Visit', label: 'Well-Child Visit', description: 'Pediatric wellness examination' },
-    { value: 'Emergency Department', label: 'Emergency Department', description: 'ED visit documentation' },
-    { value: 'Progress Note', label: 'Progress Note', description: 'Follow-up visit documentation' }
+  // Template options with actual prompts
+  defaultTemplates = [
+    { 
+      value: 'SOAP', 
+      label: 'SOAP Note', 
+      description: 'Standard Subjective, Objective, Assessment, Plan',
+      prompt: `Please format the following medical transcription into a SOAP note format:
+
+**SOAP NOTE**
+
+**SUBJECTIVE:**
+- Chief complaint and history of present illness
+- Review of systems as documented
+- Past medical/surgical/family/social history as mentioned
+
+**OBJECTIVE:**
+- Vital signs and physical examination findings
+- Laboratory and diagnostic results as discussed
+- Clinical observations
+
+**ASSESSMENT:**
+- Primary diagnosis/diagnoses
+- Secondary diagnoses if applicable
+- Clinical impression based on findings
+
+**PLAN:**
+- Treatment recommendations
+- Medications prescribed or adjusted
+- Follow-up instructions
+- Patient education provided
+
+Please ensure all medical terminology is accurate and properly formatted. Include only information explicitly mentioned in the transcription.`
+    },
+    { 
+      value: 'PrimaryCare', 
+      label: 'Primary Care Visit', 
+      description: 'Comprehensive primary care documentation',
+      prompt: `Please format the following medical transcription into a comprehensive primary care visit note:
+
+**PRIMARY CARE VISIT NOTE**
+
+**CHIEF COMPLAINT:**
+[Main reason for visit]
+
+**HISTORY OF PRESENT ILLNESS:**
+[Detailed description of current condition]
+
+**REVIEW OF SYSTEMS:**
+[Systems reviewed during visit]
+
+**PAST MEDICAL HISTORY:**
+[Relevant past medical conditions]
+
+**MEDICATIONS:**
+[Current medications discussed]
+
+**PHYSICAL EXAMINATION:**
+[Physical exam findings]
+
+**ASSESSMENT AND PLAN:**
+[For each problem identified:]
+- Problem: [Diagnosis/Issue]
+- Assessment: [Clinical thinking]
+- Plan: [Specific actions/treatments]
+
+**PATIENT EDUCATION:**
+[Education provided to patient]
+
+**FOLLOW-UP:**
+[Next steps and follow-up instructions]`
+    },
+    { 
+      value: 'Emergency Department', 
+      label: 'Emergency Department', 
+      description: 'ED visit documentation',
+      prompt: `Please format the following medical transcription into an Emergency Department note:
+
+**EMERGENCY DEPARTMENT NOTE**
+
+**CHIEF COMPLAINT:**
+[Primary reason for ED visit]
+
+**HISTORY OF PRESENT ILLNESS:**
+[Timeline and details of current condition]
+
+**PAST MEDICAL HISTORY:**
+[Relevant medical history]
+
+**MEDICATIONS:**
+[Current medications]
+
+**ALLERGIES:**
+[Known allergies]
+
+**VITAL SIGNS:**
+[Vital signs on arrival and during stay]
+
+**PHYSICAL EXAMINATION:**
+[Systematic physical exam findings]
+
+**DIAGNOSTIC STUDIES:**
+[Labs, imaging, other tests performed]
+
+**EMERGENCY DEPARTMENT COURSE:**
+[Treatment provided in ED]
+
+**MEDICAL DECISION MAKING:**
+[Clinical reasoning and decision process]
+
+**DISPOSITION:**
+[Discharge vs admission decision and rationale]
+
+**DISCHARGE INSTRUCTIONS:**
+[Patient instructions and follow-up care]`
+    }
   ];
+
+  customTemplates: any[] = [];
+  templateOptions: any[] = [];
+
+  // Template management
+  showTemplateManager = false;
+  selectedTemplateForEditing: any = null;
+  editingTemplateName = '';
+  editingTemplatePrompt = '';
+  isCreatingNewTemplate = false;
 
   // Local model options
   localModelOptions = [
@@ -63,13 +182,16 @@ export class AppComponent implements OnInit, OnDestroy {
   config: Config = {
     azureApiKey: '',
     azureEndpoint: 'https://your-resource.openai.azure.com/',
+    azureApiVersion: '2024-02-15-preview',
     noteModel: 'azure',
     localModel: 'gemma3-4b',
     asrEngine: 'vosk',
     voskModel: 'vosk-model-en-us-0.22',
     whisperModel: 'tiny',
     encryptRecordings: true,
-    selectedTemplate: 'SOAP'
+    selectedTemplate: 'SOAP',
+    useAgentPipeline: false,
+    agentSettings: '{}'
   };
 
   // Consent
@@ -105,6 +227,7 @@ export class AppComponent implements OnInit, OnDestroy {
   // File Upload
   selectedFile?: File;
   selectedFileUrl: string | null = null;
+  isTranscribing = false;
 
   // Model Comparison
   comparison: Comparison = {
@@ -113,13 +236,15 @@ export class AppComponent implements OnInit, OnDestroy {
   };
 
   constructor(
+    private fb: FormBuilder,
     private http: HttpClient,
-    private transcriptionService: TranscriptionService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private transcriptionService: TranscriptionService
   ) {}
 
   ngOnInit() {
     this.loadConfiguration();
+    this.loadTemplates();
   }
 
   ngOnDestroy() {
@@ -159,13 +284,16 @@ export class AppComponent implements OnInit, OnDestroy {
     this.config = {
       azureApiKey: '',
       azureEndpoint: 'https://your-resource.openai.azure.com/',
+      azureApiVersion: '2024-02-15-preview',
       noteModel: 'azure',
       localModel: 'gemma3-4b',
       asrEngine: 'vosk',
       voskModel: 'vosk-model-en-us-0.22',
       whisperModel: 'tiny',
       encryptRecordings: true,
-      selectedTemplate: 'SOAP'
+      selectedTemplate: 'SOAP',
+      useAgentPipeline: false,
+      agentSettings: '{}'
     };
     this.saveConfiguration();
     alert('Configuration reset to defaults');
@@ -183,6 +311,155 @@ export class AppComponent implements OnInit, OnDestroy {
   getLocalModelDescription(): string {
     const selectedModel = this.localModelOptions.find(m => m.value === this.config.localModel);
     return selectedModel ? selectedModel.description : '';
+  }
+
+  // Template Management Functions
+  loadTemplates() {
+    const savedCustomTemplates = localStorage.getItem('customMedicalTemplates');
+    if (savedCustomTemplates) {
+      this.customTemplates = JSON.parse(savedCustomTemplates);
+    }
+    this.templateOptions = [...this.defaultTemplates, ...this.customTemplates];
+  }
+
+  saveCustomTemplates() {
+    localStorage.setItem('customMedicalTemplates', JSON.stringify(this.customTemplates));
+    this.templateOptions = [...this.defaultTemplates, ...this.customTemplates];
+  }
+
+  openTemplateManager() {
+    this.showTemplateManager = true;
+  }
+
+  closeTemplateManager() {
+    this.showTemplateManager = false;
+    this.selectedTemplateForEditing = null;
+    this.editingTemplateName = '';
+    this.editingTemplatePrompt = '';
+    this.isCreatingNewTemplate = false;
+  }
+
+  selectTemplateForEditing(template: any) {
+    this.selectedTemplateForEditing = template;
+    this.editingTemplateName = template.label;
+    this.editingTemplatePrompt = template.prompt;
+    this.isCreatingNewTemplate = false;
+  }
+
+  startCreatingNewTemplate() {
+    this.isCreatingNewTemplate = true;
+    this.selectedTemplateForEditing = null;
+    this.editingTemplateName = '';
+    this.editingTemplatePrompt = `Please format the following medical transcription into a structured note:
+
+**[TEMPLATE NAME]**
+
+[Add your custom formatting instructions here]
+
+Please ensure all medical terminology is accurate and properly formatted. Include only information explicitly mentioned in the transcription.`;
+  }
+
+  saveTemplate() {
+    if (!this.editingTemplateName.trim() || !this.editingTemplatePrompt.trim()) {
+      alert('Please provide both a template name and prompt content.');
+      return;
+    }
+
+    const templateValue = this.editingTemplateName.toLowerCase().replace(/\s+/g, '-');
+    
+    if (this.isCreatingNewTemplate) {
+      // Check if template name already exists
+      const exists = this.templateOptions.find(t => t.value === templateValue);
+      if (exists) {
+        alert('A template with this name already exists. Please choose a different name.');
+        return;
+      }
+
+      // Create new custom template
+      const newTemplate = {
+        value: templateValue,
+        label: this.editingTemplateName.trim(),
+        description: `Custom template: ${this.editingTemplateName.trim()}`,
+        prompt: this.editingTemplatePrompt.trim(),
+        isCustom: true
+      };
+
+      this.customTemplates.push(newTemplate);
+      this.saveCustomTemplates();
+      
+      // Set as selected template
+      this.config.selectedTemplate = templateValue;
+      this.saveConfiguration();
+      
+      alert('New template created successfully!');
+    } else if (this.selectedTemplateForEditing) {
+      // Update existing template
+      if (this.selectedTemplateForEditing.isCustom) {
+        // Update custom template
+        const customIndex = this.customTemplates.findIndex(t => t.value === this.selectedTemplateForEditing.value);
+        if (customIndex !== -1) {
+          this.customTemplates[customIndex].label = this.editingTemplateName.trim();
+          this.customTemplates[customIndex].prompt = this.editingTemplatePrompt.trim();
+          this.customTemplates[customIndex].description = `Custom template: ${this.editingTemplateName.trim()}`;
+          this.saveCustomTemplates();
+          alert('Template updated successfully!');
+        }
+      } else {
+        // Create new custom version of default template
+        const newCustomTemplate = {
+          value: `${this.selectedTemplateForEditing.value}-custom-${Date.now()}`,
+          label: `${this.editingTemplateName.trim()} (Custom)`,
+          description: `Custom version of ${this.selectedTemplateForEditing.label}`,
+          prompt: this.editingTemplatePrompt.trim(),
+          isCustom: true
+        };
+        
+        this.customTemplates.push(newCustomTemplate);
+        this.saveCustomTemplates();
+        
+        // Set as selected template
+        this.config.selectedTemplate = newCustomTemplate.value;
+        this.saveConfiguration();
+        
+        alert('Custom template created from default template!');
+      }
+    }
+
+    this.closeTemplateManager();
+  }
+
+  deleteTemplate(template: any) {
+    if (!template.isCustom) {
+      alert('Cannot delete default templates. You can only delete custom templates.');
+      return;
+    }
+
+    if (confirm(`Are you sure you want to delete the template "${template.label}"?`)) {
+      this.customTemplates = this.customTemplates.filter(t => t.value !== template.value);
+      this.saveCustomTemplates();
+      
+      // If this was the selected template, switch to default
+      if (this.config.selectedTemplate === template.value) {
+        this.config.selectedTemplate = 'SOAP';
+        this.saveConfiguration();
+      }
+      
+      // Close manager if this template was being edited
+      if (this.selectedTemplateForEditing?.value === template.value) {
+        this.closeTemplateManager();
+      }
+      
+      alert('Template deleted successfully!');
+    }
+  }
+
+  getCurrentTemplatePrompt(): string {
+    const currentTemplate = this.templateOptions.find(t => t.value === this.config.selectedTemplate);
+    return currentTemplate ? currentTemplate.prompt : '';
+  }
+
+  getTemplateByValue(value: string): any {
+    return this.templateOptions.find(t => t.value === value);
   }
 
   // UI Navigation
@@ -340,11 +617,27 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private startRealtimeTranscription(stream: MediaStream) {
+    // Clear previous transcription text
+    this.finalTranscriptionText = '';
+    this.partialTranscriptionText = '';
+    this.lowConfidenceWords = [];
+    console.log('Cleared transcription text for new recording session');
+
     const SAMPLE_RATE = 16000;
 
-    // Use the actual model folder name for WebSocket
-    const modelParam = this.config.voskModel || 'vosk-model-en-us-0.22';
-    const wsUrl = `ws://${location.hostname}:8000/ws/vosk?model=${encodeURIComponent(modelParam)}`;
+    let wsUrl = '';
+    if (this.config.asrEngine === 'vosk') {
+      // Reuse pre-loaded model by sending "default" unless user overrides
+      const modelParam = 'default';  // Always use pre-loaded model to avoid timeout
+      wsUrl = `ws://${location.hostname}:8000/ws/vosk?model=${encodeURIComponent(modelParam)}`;
+    } else if (this.config.asrEngine === 'whisper') {
+      wsUrl = `ws://${location.hostname}:8000/ws/stream?engine=whisper`;
+    } else if (this.config.asrEngine === 'azure') {
+      wsUrl = `ws://${location.hostname}:8000/ws/stream?engine=azure_speech`;
+    } else {
+      // Fallback to generic stream with selected engine value
+      wsUrl = `ws://${location.hostname}:8000/ws/stream?engine=${encodeURIComponent(this.config.asrEngine)}`;
+    }
     console.log('Connecting to WebSocket:', wsUrl);
     this.realtimeSocket = new WebSocket(wsUrl);
 
@@ -372,13 +665,29 @@ export class AppComponent implements OnInit, OnDestroy {
       const msg = JSON.parse(data);
       console.log('WebSocket message received:', msg);
       
+      // Handle Vosk-style messages (type-based)
       if (msg.type === 'partial') {
         this.partialTranscriptionText = msg.text;
+        console.log('Setting partialTranscriptionText to:', msg.text);
+        console.log('Current finalTranscriptionText:', this.finalTranscriptionText);
+        console.log('Current recordingMode:', this.recordingMode);
+        console.log('Current isRecording:', this.isRecording);
+        this.cdr.detectChanges(); // Force UI update for partial text
       }
-      if (msg.type === 'final') {
+      else if (msg.type === 'final') {
         if (msg.text) {
-          this.finalTranscriptionText += (this.finalTranscriptionText ? ' ' : '') + msg.text;
+          // For Whisper: Replace entire text (Whisper sends complete transcription)
+          // For Vosk: Append new text (Vosk sends incremental words)
+          if (this.config.asrEngine === 'whisper') {
+            this.finalTranscriptionText = msg.text;
+            console.log('Whisper: Replaced finalTranscriptionText with:', msg.text);
+          } else {
+            // Vosk: Append incremental text
+            this.finalTranscriptionText += (this.finalTranscriptionText ? ' ' : '') + msg.text;
+            console.log('Vosk: Appended to finalTranscriptionText:', msg.text);
+          }
           console.log('Final transcription updated:', this.finalTranscriptionText);
+          this.cdr.detectChanges();
           
           // Check for low confidence words if result contains word details
           if (msg.result && msg.result.length > 0) {
@@ -391,6 +700,32 @@ export class AppComponent implements OnInit, OnDestroy {
           }
         }
         this.partialTranscriptionText = '';
+        console.log('Cleared partialTranscriptionText');
+      }
+      // Handle Whisper/Azure-style messages (is_final-based)
+      else if (msg.hasOwnProperty('is_final')) {
+        if (msg.is_final) {
+          // Final result - update main transcription
+          if (msg.text && msg.text !== this.finalTranscriptionText) {
+            this.finalTranscriptionText = msg.text;
+            console.log('Final transcription updated (Whisper):', this.finalTranscriptionText);
+            this.cdr.detectChanges();
+          }
+          this.partialTranscriptionText = '';
+        } else {
+          // Partial result - show partial text or processing status
+          if (msg.partial) {
+            this.partialTranscriptionText = msg.partial;
+            console.log('Setting partialTranscriptionText (Whisper):', msg.partial);
+            this.cdr.detectChanges();
+          }
+          // Update final text if it has grown
+          if (msg.text && msg.text !== this.finalTranscriptionText) {
+            this.finalTranscriptionText = msg.text;
+            console.log('Updated transcription text (Whisper):', this.finalTranscriptionText);
+            this.cdr.detectChanges();
+          }
+        }
       }
     };
 
@@ -535,10 +870,21 @@ export class AppComponent implements OnInit, OnDestroy {
         template: this.config.selectedTemplate,
         api_key: this.config.azureApiKey,
         endpoint: this.config.azureEndpoint,
+        api_version: this.config.azureApiVersion,
         model: 'gpt-4o',
         use_local: this.config.noteModel === 'local',
-        local_model: this.config.localModel
-      };
+        local_model: this.config.localModel,
+        use_agent_pipeline: this.config.useAgentPipeline
+      } as NoteRequest;
+
+      if (this.config.useAgentPipeline && this.config.agentSettings) {
+        try {
+          const parsed = JSON.parse(this.config.agentSettings);
+          noteRequest.agent_settings = parsed;
+        } catch (e) {
+          console.warn('Invalid agent settings JSON, ignoring');
+        }
+      }
 
       const response = await this.transcriptionService.generateNote(noteRequest).toPromise();
       
@@ -561,6 +907,24 @@ export class AppComponent implements OnInit, OnDestroy {
       }
       this.selectedFileUrl = URL.createObjectURL(file);
     }
+  }
+
+  clearSelectedFile() {
+    if (this.selectedFileUrl) {
+      URL.revokeObjectURL(this.selectedFileUrl);
+    }
+    this.selectedFile = undefined;
+    this.selectedFileUrl = null;
+    
+    // Reset any transcription state
+    this.currentStep = 0;
+    this.showResults = false;
+    this.rawTranscription = '';
+    this.cleanedTranscription = '';
+    this.generatedNote = '';
+    this.speakerDiarization = '';
+    
+    console.log('Selected file cleared. You can now choose a different file.');
   }
 
   onDragOver(event: DragEvent) {
@@ -593,9 +957,13 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   async uploadAndTranscribe() {
-    if (!this.selectedFile) return;
+    if (!this.selectedFile || this.isTranscribing) return;
 
     try {
+      this.isTranscribing = true;
+      this.currentStep = 0;
+      this.showResults = false;
+      
       this.updateProgress(1);
       const response = await this.transcriptionService.transcribeAudio(
         this.selectedFile,
@@ -615,10 +983,20 @@ export class AppComponent implements OnInit, OnDestroy {
         this.updateProgress(4);
         
         this.showResults = true;
+        
+        // Show brief success notification
+        setTimeout(() => {
+          console.log('✅ Transcription and note generation completed successfully!');
+        }, 100);
       }
     } catch (error) {
       console.error('Error uploading file:', error);
       alert(`Error uploading file: ${error?.error?.error || error.message || 'Unknown error'}`);
+      // Reset progress on error
+      this.currentStep = 0;
+      this.showResults = false;
+    } finally {
+      this.isTranscribing = false;
     }
   }
 
@@ -731,5 +1109,50 @@ export class AppComponent implements OnInit, OnDestroy {
     // Add a brief visual indicator that transcription is complete
     console.log('✅ Transcription completed and results are now visible');
     // Could add a toast notification here in the future
+  }
+
+  onTranscriptFileSelected(event: any) {
+    const file: File = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.rawTranscription = (reader.result as string) || '';
+        // Reset state for new transcript
+        this.currentStep = 0;
+        this.showResults = false;
+        this.cleanedTranscription = '';
+        this.generatedNote = '';
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  async processTranscriptText() {
+    if (!this.rawTranscription || this.isTranscribing) return;
+
+    try {
+      this.isTranscribing = true;
+      this.currentStep = 0; // Step 0: Load transcript
+      this.updateProgress(0);
+      this.showResults = false;
+
+      // Step 1: Clean
+      await this.cleanTranscription();
+      this.updateProgress(1);
+
+      // Step 2: Generate Note
+      await this.generateMedicalNote();
+      this.updateProgress(2);
+
+      // Step 3: Complete
+      this.showResults = true;
+      this.updateProgress(3);
+    } catch (error) {
+      console.error('Error processing transcript:', error);
+      this.currentStep = 0;
+      this.showResults = false;
+    } finally {
+      this.isTranscribing = false;
+    }
   }
 }

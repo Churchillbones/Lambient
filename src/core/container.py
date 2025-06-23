@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import inspect
 from types import MappingProxyType
-from typing import Any, Dict, Type, TypeVar
+from typing import Any, Dict, Tuple, Type, TypeVar
+from enum import Enum, auto
 
 from .exceptions import ConfigurationError, ServiceNotFoundError
 
@@ -21,19 +22,39 @@ class ServiceContainer:
     """
 
     def __init__(self) -> None:  # noqa: D401
-        self._registrations: Dict[Type[Any], Type[Any]] = {}
+        # _registrations maps interface -> (implementation, lifetime)
+        self._registrations: Dict[Type[Any], Tuple[Type[Any], "_Lifetime"]] = {}
         self._singletons: Dict[Type[Any], Any] = {}
 
     # ---------------------------------------------------------------------
-    # Registration helpers
+    # Lifetime enum
     # ---------------------------------------------------------------------
-    def register_singleton(self, interface: Type[T], implementation: Type[T]) -> None:
-        """Register *implementation* to be instantiated once per container."""
+
+    class _Lifetime(Enum):
+        SINGLETON = auto()
+        TRANSIENT = auto()
+
+    # ------------------------------------------------------------------
+    # Registration helpers
+    # ------------------------------------------------------------------
+
+    def register_singleton(self, interface: Type[T], implementation: Type[T]) -> None:  # noqa: D401
+        self._register(interface, implementation, ServiceContainer._Lifetime.SINGLETON)
+
+    def register_transient(self, interface: Type[T], implementation: Type[T]) -> None:  # noqa: D401
+        self._register(interface, implementation, ServiceContainer._Lifetime.TRANSIENT)
+
+    def _register(self, interface: Type[T], implementation: Type[T], lifetime: "_Lifetime") -> None:
         if not issubclass(implementation, interface):
             raise ConfigurationError(
                 f"{implementation.__name__} does not implement {interface.__name__}"
             )
-        self._registrations[interface] = implementation
+        if interface in self._registrations:
+            prev_impl, _ = self._registrations[interface]
+            raise ConfigurationError(
+                f"{interface.__name__} already registered with {prev_impl.__name__}"
+            )
+        self._registrations[interface] = (implementation, lifetime)
 
     def register_instance(self, interface: Type[T], instance: T) -> None:
         """Bind an already-created *instance* as singleton for *interface*."""
@@ -48,16 +69,25 @@ class ServiceContainer:
     # ------------------------------------------------------------------
     def resolve(self, interface: Type[T]) -> T:
         """Return a fully-constructed singleton for *interface*."""
+        # Fast path for cached singleton
         if interface in self._singletons:
             return self._singletons[interface]  # type: ignore[return-value]
 
         if interface not in self._registrations:
             raise ServiceNotFoundError(f"Service {interface.__name__} not registered")
 
-        implementation = self._registrations[interface]
-        instance: T = self._create_instance(implementation)
-        self._singletons[interface] = instance
-        return instance
+        implementation, lifetime = self._registrations[interface]
+
+        if lifetime == ServiceContainer._Lifetime.SINGLETON:
+            if interface in self._singletons:
+                return self._singletons[interface]  # type: ignore[return-value]
+
+            instance: T = self._create_instance(implementation)
+            self._singletons[interface] = instance
+            return instance
+
+        # TRANSIENT – always create a new instance
+        return self._create_instance(implementation)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -100,6 +130,17 @@ class ServiceContainer:
     def registrations(self) -> MappingProxyType:
         """Return a read-only view of current registrations."""
         return MappingProxyType(self._registrations)
+
+    # ------------------------------------------------------------------
+    # Diagnostics helpers
+    # ------------------------------------------------------------------
+
+    def describe(self) -> str:  # noqa: D401
+        """Return human-readable diagnostics of current registrations."""
+        lines = ["ServiceContainer registrations (interface → implementation [lifetime])"]
+        for iface, (impl, lifetime) in self._registrations.items():
+            lines.append(f" • {iface.__name__} → {impl.__name__} [{lifetime.name.lower()}]")
+        return "\n".join(lines)
 
 
 # Single global container instance used by legacy code paths until full

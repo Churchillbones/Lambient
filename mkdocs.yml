@@ -1,0 +1,20 @@
+site_name: Ambient Transcription with GPT
+repo_url: https://github.com/Churchillbones/Ambient-Transcription-with-GPT-Note-Creation-
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Usage:
+      - Providers: usage/providers.md
+      - CLI: usage/cli.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - awesome-pages 

@@ -6,10 +6,11 @@ from ..exceptions import ConfigurationError, ServiceNotFoundError
 from ..interfaces.llm_service import ILLMProvider
 from .base_factory import IServiceFactory
 
-from ..providers.azure_openai_provider import AzureOpenAIProvider
+# Direct imports - all providers are now in core.providers
+from ..providers.openai_provider import OpenAIProvider
 from ..providers.ollama_provider import OllamaProvider
 from ..providers.local_llm_provider import LocalLLMProvider
-from ..providers.openai_provider import OpenAIProvider
+from ..providers.azure_openai_provider import AzureOpenAIProvider
 
 __all__ = ["LLMProviderFactory"]
 

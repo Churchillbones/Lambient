@@ -1,18 +1,40 @@
-import requests
 import json
+import logging
 import time
 import warnings
-import urllib3
-from typing import List, Dict, Any, Union
-from ..config import config, logger
+from typing import List
+
+import numpy as np
+import requests
+
+from core.container import global_container
+from core.interfaces.config_service import IConfigurationService
+
+# Standardized logger
+logger = logging.getLogger("ambient_scribe")
 
 class EmbeddingService:
     """Service for generating and working with text embeddings"""
     
-    def __init__(self, api_key: str, endpoint: str = "https://va-east-apim.devtest.spd.vaec.va.gov/openai/deployments/text-embedding-3-large/embeddings", 
+    def __init__(self, api_key: str, endpoint: str = None, 
                 api_version: str = "2025-01-01-preview", verify_ssl: bool = False):
         self.api_key = api_key
-        self.endpoint = endpoint
+        
+        # Resolve endpoint: explicit arg -> IConfigurationService -> env var
+        if endpoint:
+            self.endpoint = endpoint
+        else:
+            resolved = ""
+            try:
+                cfg = global_container.resolve(IConfigurationService)
+                resolved = cfg.get("azure_embedding_endpoint", "")  # type: ignore[arg-type]
+            except Exception:
+                resolved = ""
+            if not resolved:
+                raise ValueError(
+                    "No embedding endpoint configured. Provide `endpoint` arg or set via IConfigurationService/ENV VAR."
+                )
+            self.endpoint = resolved
         self.api_version = api_version
         self.verify_ssl = verify_ssl
         self.headers = {
@@ -26,7 +48,7 @@ class EmbeddingService:
         # Handle SSL verification
         if not verify_ssl:
             # Disable SSL warnings when verification is turned off
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            warnings.filterwarnings("ignore", category=UserWarning)
             logger.warning("SSL certificate verification is disabled for embedding service")
         
         logger.debug(f"Initialized EmbeddingService with endpoint: {self.endpoint}")
@@ -95,28 +117,14 @@ class EmbeddingService:
         if not a or not b:
             return 0.0
         
-        try:
-            import numpy as np
-            
-            a_array = np.array(a)
-            b_array = np.array(b)
-            
-            dot_product = np.dot(a_array, b_array)
-            norm_a = np.linalg.norm(a_array)
-            norm_b = np.linalg.norm(b_array)
-            
-            if norm_a == 0 or norm_b == 0:
-                return 0.0
-                
-            return float(dot_product / (norm_a * norm_b))  # Convert from numpy type to float
-        except ImportError:
-            logger.warning("NumPy not available for vector operations, using fallback implementation")
-            # Fallback implementation without numpy
-            dot_product = sum(x * y for x, y in zip(a, b))
-            norm_a = sum(x * x for x in a) ** 0.5
-            norm_b = sum(y * y for y in b) ** 0.5
-            
-            if norm_a == 0 or norm_b == 0:
-                return 0.0
-                
-            return dot_product / (norm_a * norm_b)
+        a_array = np.array(a, dtype=float)
+        b_array = np.array(b, dtype=float)
+
+        dot_product = float(np.dot(a_array, b_array))
+        norm_a = float(np.linalg.norm(a_array))
+        norm_b = float(np.linalg.norm(b_array))
+
+        if norm_a == 0 or norm_b == 0:
+            return 0.0
+
+        return dot_product / (norm_a * norm_b)

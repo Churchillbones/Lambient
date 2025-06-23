@@ -7,8 +7,11 @@ from ..exceptions import ConfigurationError, ServiceNotFoundError
 from ..interfaces.transcription import ITranscriber
 from .base_factory import IServiceFactory
 
-# No direct imports of ASR modules here to avoid circular dependencies –
-# they are imported lazily inside _register_default_providers()
+# Direct imports – circular dependencies resolved in Phase 2 cleanup
+from src.asr.transcribers.vosk import VoskTranscriber
+from src.asr.transcribers.whisper import WhisperTranscriber
+from src.asr.transcribers.azure_speech import AzureSpeechTranscriber
+from src.asr.transcribers.azure_whisper import AzureWhisperTranscriber
 
 __all__ = ["TranscriberFactory"]
 
@@ -20,8 +23,12 @@ class TranscriberFactory(IServiceFactory[ITranscriber]):
     """
 
     def __init__(self) -> None:  # noqa: D401
-        self._providers: Dict[str, Type[ITranscriber]] = {}
-        self._register_default_providers()
+        self._providers: Dict[str, Type[ITranscriber]] = {
+            "vosk": VoskTranscriber,
+            "whisper": WhisperTranscriber,
+            "azure_speech": AzureSpeechTranscriber,
+            "azure_whisper": AzureWhisperTranscriber,
+        }
 
     # ------------------------------------------------------------------
     # IServiceFactory implementation
@@ -54,23 +61,8 @@ class TranscriberFactory(IServiceFactory[ITranscriber]):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _register_default_providers(self) -> None:
-        """Register the built-in Vosk, Whisper, and Azure speech providers."""
-        # Import lazily to avoid circular-import issues when bootstrap
-        # itself relies on this factory during application import time.
-        from importlib import import_module
-
-        _Vosk = import_module("core.providers.vosk_transcriber").VoskTranscriberProvider
-        _Whisper = import_module("core.providers.whisper_transcriber").WhisperTranscriberProvider
-        _AzureSpeech = import_module("core.providers.azure_speech_transcriber").AzureSpeechTranscriberProvider
-
-        self._providers.update(
-            {
-                "vosk": _Vosk,
-                "whisper": _Whisper,
-                "azure_speech": _AzureSpeech,
-            }
-        )
+    def _register_default_providers(self) -> None:  # noqa: D401
+        return  # Providers are registered statically in __init__
 
     def _instantiate(
         self,
@@ -89,7 +81,7 @@ class TranscriberFactory(IServiceFactory[ITranscriber]):
             size = options.get("size", "tiny")
             return cls(size=size)  # type: ignore[arg-type]
 
-        if provider_type == "azure_speech":
+        if provider_type in ("azure_speech", "azure_whisper"):
             return cls(**options)  # type: ignore[arg-type]
 
         # Default: forward all options transparently

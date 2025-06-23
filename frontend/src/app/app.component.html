@@ -22,15 +22,6 @@
     <div class="sidebar-section">
       <h3>Note Generation</h3>
       <div class="form-group">
-        <label class="form-label">Note Template</label>
-        <select class="form-control" [(ngModel)]="config.selectedTemplate" (change)="saveConfiguration()">
-          <option *ngFor="let template of templateOptions" [value]="template.value" [title]="template.description">
-            {{template.label}}
-          </option>
-        </select>
-        <small class="form-text text-muted">{{getTemplateDescription()}}</small>
-      </div>
-      <div class="form-group">
         <label class="form-label">Note Model</label>
         <select class="form-control" [(ngModel)]="config.noteModel" (change)="saveConfiguration()">
           <option value="azure">Azure OpenAI (GPT-4)</option>
@@ -45,6 +36,15 @@
           </option>
         </select>
         <small class="form-text text-muted">{{getLocalModelDescription()}}</small>
+      </div>
+      <div class="checkbox-group" style="margin-top:8px;">
+        <input type="checkbox" id="agentPipeline" [(ngModel)]="config.useAgentPipeline" (change)="saveConfiguration()">
+        <label for="agentPipeline">Use Agent Pipeline</label>
+      </div>
+      <div class="form-group" *ngIf="config.useAgentPipeline" style="margin-top:12px;">
+        <label class="form-label">Agent Settings (JSON)</label>
+        <textarea class="form-control" rows="6" [(ngModel)]="config.agentSettings" (change)="saveConfiguration()" placeholder='{"setting":"value"}'></textarea>
+        <small class="form-text text-muted">Provide JSON for custom agent behaviour. Invalid JSON will be ignored.</small>
       </div>
     </div>
 
@@ -95,7 +95,7 @@
     <div class="header">
       <h1>
         <i class="fas fa-stethoscope"></i>
-        Medical Transcription & Note Generation
+        Lambient Scribe and Medical Transcription and AI Note Generation
       </h1>
       <div class="header-actions">
         <button class="btn btn-secondary" (click)="toggleSidebar()">
@@ -117,7 +117,10 @@
         <i class="fas fa-upload"></i> Upload Audio
       </div>
       <div class="tab" [class.active]="activeTab === 'view'" (click)="switchTab('view')">
-        <i class="fas fa-file-alt"></i> View Transcription
+        <i class="fas fa-file-upload"></i> Upload Transcript / Note Generation
+      </div>
+      <div class="tab" [class.active]="activeTab === 'templates'" (click)="switchTab('templates')">
+        <i class="fas fa-file-medical"></i> Note Library / Prompt Library
       </div>
       <div class="tab" [class.active]="activeTab === 'compare'" (click)="switchTab('compare')">
         <i class="fas fa-balance-scale"></i> Model Comparison
@@ -305,6 +308,44 @@
             </div>
           </div>
         </div>
+
+        <!-- Template Selection -->
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-file-medical"></i> Select Template
+            </h3>
+          </div>
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label class="form-label" style="font-size: 16px; font-weight: 600;">Template</label>
+            <select class="form-control" [(ngModel)]="config.selectedTemplate" (change)="saveConfiguration()" style="font-size: 14px;">
+              <option *ngFor="let template of templateOptions" [value]="template.value" [title]="template.description">
+                {{template.label}} {{template.isCustom ? '(Custom)' : ''}}
+              </option>
+            </select>
+            <small class="form-text text-muted">{{getTemplateDescription()}}</small>
+          </div>
+        </div>
+
+        <!-- Template Preview -->
+        <div class="result-box" style="margin-bottom:24px;">
+          <div class="result-header">
+            <div class="result-title">
+              <i class="fas fa-eye"></i> Template Preview
+            </div>
+            <div class="result-actions">
+              <button class="btn btn-secondary btn-sm" (click)="selectTemplateForEditing(getTemplateByValue(config.selectedTemplate)); openTemplateManager()">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(getCurrentTemplatePrompt())">
+                <i class="fas fa-copy"></i>
+              </button>
+            </div>
+          </div>
+          <div class="result-content" style="max-height:150px; overflow-y:auto; font-size:13px; white-space: pre-wrap;">
+            {{getCurrentTemplatePrompt()}}
+          </div>
+        </div>
       </div>
 
       <!-- Upload Tab -->
@@ -326,17 +367,97 @@
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Supported formats: WAV, MP3, M4A</p>
             <input #fileInput type="file" accept="audio/*" style="display: none;" (change)="onFileSelected($event)">
           </div>
+
+          <!-- Template Selection -->
+          <div class="form-group" style="margin-top: 24px;">
+            <label class="form-label" style="font-size: 16px; font-weight: 600;">Template</label>
+            <select class="form-control" [(ngModel)]="config.selectedTemplate" (change)="saveConfiguration()" style="font-size: 14px;">
+              <option *ngFor="let template of templateOptions" [value]="template.value" [title]="template.description">
+                {{template.label}} {{template.isCustom ? '(Custom)' : ''}}
+              </option>
+            </select>
+            <small class="form-text text-muted">{{getTemplateDescription()}}</small>
+          </div>
+
+          <!-- Template Preview -->
+          <div class="result-box" style="margin-bottom:24px;">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="fas fa-eye"></i> Template Preview
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-secondary btn-sm" (click)="selectTemplateForEditing(getTemplateByValue(config.selectedTemplate)); openTemplateManager()">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(getCurrentTemplatePrompt())">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="result-content" style="max-height:150px; overflow-y:auto; font-size:13px; white-space: pre-wrap;">
+              {{getCurrentTemplatePrompt()}}
+            </div>
+          </div>
+
+          <!-- Progress Steps -->
+          <div class="progress-steps" style="margin-top:16px;" *ngIf="isTranscribing || showResults">
+            <div class="step" [class.active]="currentStep === 0" [class.completed]="currentStep > 0">
+              <div class="step-circle">1</div>
+              <div class="step-label">Upload &amp; Transcribe</div>
+            </div>
+            <div class="step" [class.active]="currentStep === 1" [class.completed]="currentStep > 1">
+              <div class="step-circle">2</div>
+              <div class="step-label">Clean</div>
+            </div>
+            <div class="step" [class.active]="currentStep === 2" [class.completed]="currentStep > 2">
+              <div class="step-circle">3</div>
+              <div class="step-label">Generate Note</div>
+            </div>
+            <div class="step" [class.active]="currentStep === 3" [class.completed]="currentStep > 3">
+              <div class="step-circle">4</div>
+              <div class="step-label">Complete</div>
+            </div>
+          </div>
+
           <div *ngIf="selectedFile" class="alert alert-info" style="margin-top: 16px;">
-            <i class="fas fa-file-audio"></i>
-            Selected file: {{selectedFile.name}} ({{(selectedFile.size / 1024 / 1024).toFixed(2)}} MB)
-            <button class="btn btn-primary" style="margin-left: 16px;" (click)="uploadAndTranscribe()">
-              <i class="fas fa-upload"></i> Upload & Transcribe
-            </button>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-file-audio"></i>
+                <span>{{selectedFile.name}} ({{(selectedFile.size / 1024 / 1024).toFixed(2)}} MB)</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" 
+                        [disabled]="isTranscribing"
+                        (click)="clearSelectedFile(); fileInput.value=''"
+                        title="Remove selected file">
+                  <i class="fas fa-times"></i>
+                </button>
+                <button class="btn btn-primary" 
+                        [disabled]="isTranscribing"
+                        (click)="uploadAndTranscribe()">
+                  <i *ngIf="!isTranscribing" class="fas fa-upload"></i>
+                  <i *ngIf="isTranscribing" class="fas fa-spinner fa-spin"></i>
+                  {{isTranscribing ? 'Processing...' : 'Upload & Transcribe'}}
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Audio Preview -->
           <div *ngIf="selectedFileUrl" style="margin-top: 16px; text-align: center;">
             <audio [src]="selectedFileUrl" controls style="width: 100%; max-width: 600px;"></audio>
+          </div>
+
+          <!-- Transcription Status -->
+          <div *ngIf="isTranscribing" class="alert alert-warning" style="margin-top: 16px;">
+            <i class="fas fa-cog fa-spin"></i>
+            <strong>Transcription in Progress...</strong>
+            <div style="margin-top: 8px;">
+              <span *ngIf="currentStep === 1">Uploading and transcribing audio file...</span>
+              <span *ngIf="currentStep === 2">Cleaning and correcting transcription...</span>
+              <span *ngIf="currentStep === 3">Generating medical note...</span>
+              <span *ngIf="currentStep === 4">Finalizing results...</span>
+            </div>
           </div>
 
           <!-- Results Section (mirrors Record tab) -->
@@ -417,11 +538,290 @@
         </div>
       </div>
 
+      <!-- Templates Tab -->
+      <div *ngIf="activeTab === 'templates'" class="fade-in">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-file-medical"></i> Note Library / Prompt Library
+            </h3>
+            <button class="btn btn-primary" (click)="startCreatingNewTemplate(); openTemplateManager()">
+              <i class="fas fa-plus"></i> Create New Template
+            </button>
+          </div>
+
+          <!-- Current Template Selection -->
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label class="form-label" style="font-size: 16px; font-weight: 600;">Active Template</label>
+            <select class="form-control" [(ngModel)]="config.selectedTemplate" (change)="saveConfiguration()" style="font-size: 14px;">
+              <option *ngFor="let template of templateOptions" [value]="template.value" [title]="template.description">
+                {{template.label}} {{template.isCustom ? '(Custom)' : ''}}
+              </option>
+            </select>
+            <small class="form-text text-muted">{{getTemplateDescription()}}</small>
+          </div>
+
+          <!-- Current Template Preview -->
+          <div class="result-box" style="margin-bottom: 24px;">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="fas fa-eye"></i> Current Template Prompt
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-secondary btn-sm" (click)="selectTemplateForEditing(getTemplateByValue(config.selectedTemplate)); openTemplateManager()"
+                        title="Edit template">
+                  <i class="fas fa-edit"></i> Edit
+                </button>
+                <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(getCurrentTemplatePrompt())">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="result-content">
+              <pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.5;">{{getCurrentTemplatePrompt() || 'No template selected'}}</pre>
+            </div>
+          </div>
+
+          <!-- Template Library -->
+          <div class="card">
+            <div class="card-header">
+              <h4 style="margin: 0; font-size: 16px;">
+                <i class="fas fa-th-list"></i> Template Library
+              </h4>
+            </div>
+            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 16px;">
+              <div *ngFor="let template of templateOptions" class="template-card" 
+                   [class.active]="template.value === config.selectedTemplate"
+                   style="border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; background: var(--surface); cursor: pointer; transition: var(--transition);"
+                   (click)="config.selectedTemplate = template.value; saveConfiguration()">
+                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 8px;">
+                  <div style="flex: 1;">
+                    <h5 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600;">
+                      {{template.label}}
+                      <span *ngIf="template.isCustom" style="background: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px;">CUSTOM</span>
+                    </h5>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.4;">{{template.description}}</p>
+                  </div>
+                  <div class="template-actions" style="display: flex; gap: 4px; margin-left: 8px;">
+                    <button class="btn btn-secondary btn-sm" 
+                            style="padding: 4px 8px; font-size: 11px;"
+                            (click)="selectTemplateForEditing(template); openTemplateManager(); $event.stopPropagation()"
+                            title="Edit template">
+                      <i class="fas fa-edit"></i>
+                    </button>
+                    <button *ngIf="template.isCustom" 
+                            class="btn btn-danger btn-sm" 
+                            style="padding: 4px 8px; font-size: 11px;"
+                            (click)="deleteTemplate(template); $event.stopPropagation()"
+                            title="Delete custom template">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); background: #f8f9fa; padding: 8px; border-radius: 4px; margin-top: 8px; max-height: 60px; overflow: hidden; position: relative;">
+                  {{template.prompt.substring(0, 150)}}{{template.prompt.length > 150 ? '...' : ''}}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template Manager Modal -->
+      <div *ngIf="showTemplateManager" class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;" (click)="closeTemplateManager()">
+        <div class="modal-content" style="background: white; border-radius: 8px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto;" (click)="$event.stopPropagation()">
+          <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+            <h3 style="margin: 0; font-size: 20px; font-weight: 600;">
+              <i class="fas fa-edit"></i>
+              {{isCreatingNewTemplate ? 'Create New Template' : 'Edit Template'}}
+            </h3>
+            <button class="btn btn-secondary btn-sm" (click)="closeTemplateManager()">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label" style="font-weight: 600;">Template Name</label>
+              <input type="text" 
+                     class="form-control" 
+                     [(ngModel)]="editingTemplateName" 
+                     placeholder="Enter template name (e.g., 'Custom SOAP Note')"
+                     style="font-size: 14px;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 24px;">
+              <label class="form-label" style="font-weight: 600;">Template Prompt</label>
+              <small class="form-text text-muted" style="display: block; margin-bottom: 8px;">
+                This is the prompt that will be sent to the AI model to format the transcription.
+                Include specific formatting instructions and structure requirements.
+              </small>
+              <textarea class="form-control" 
+                        [(ngModel)]="editingTemplatePrompt" 
+                        rows="20" 
+                        placeholder="Enter the template prompt..."
+                        style="font-family: 'Monaco', 'Consolas', monospace; font-size: 13px; line-height: 1.4;"></textarea>
+            </div>
+
+            <div class="modal-actions" style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color);">
+              <button class="btn btn-secondary" (click)="closeTemplateManager()">
+                Cancel
+              </button>
+              <button class="btn btn-primary" (click)="saveTemplate()">
+                <i class="fas fa-save"></i>
+                {{isCreatingNewTemplate ? 'Create Template' : 'Save Changes'}}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- View Tab -->
-      <div *ngIf="activeTab === 'view'">
-        <div class="alert alert-info">
-          <i class="fas fa-info-circle"></i>
-          Select a WAV file to view its transcription
+      <div *ngIf="activeTab === 'view'" class="fade-in">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              <i class="fas fa-file-upload"></i> Upload Transcript
+            </h3>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Paste Transcript Text</label>
+              <textarea class="form-control" rows="10" [(ngModel)]="rawTranscription" placeholder="Paste transcript text here..."></textarea>
+            </div>
+            <div class="form-group" style="margin-top:16px;">
+              <label class="form-label">Or Upload Transcript File (.txt)</label>
+              <input type="file" accept=".txt" (change)="onTranscriptFileSelected($event)">
+            </div>
+            <div class="form-group" style="margin-top: 24px;">
+              <label class="form-label" style="font-size: 16px; font-weight: 600;">Template</label>
+              <select class="form-control" [(ngModel)]="config.selectedTemplate" (change)="saveConfiguration()" style="font-size: 14px;">
+                <option *ngFor="let template of templateOptions" [value]="template.value" [title]="template.description">
+                  {{template.label}} {{template.isCustom ? '(Custom)' : ''}}
+                </option>
+              </select>
+              <small class="form-text text-muted">{{getTemplateDescription()}}</small>
+            </div>
+
+            <!-- Template Preview -->
+            <div class="result-box" style="margin-bottom:24px;">
+              <div class="result-header">
+                <div class="result-title">
+                  <i class="fas fa-eye"></i> Template Preview
+                </div>
+                <div class="result-actions">
+                  <button class="btn btn-secondary btn-sm" (click)="selectTemplateForEditing(getTemplateByValue(config.selectedTemplate)); openTemplateManager()">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(getCurrentTemplatePrompt())">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="result-content" style="max-height:150px; overflow-y:auto; font-size:13px; white-space: pre-wrap;">
+                {{getCurrentTemplatePrompt()}}
+              </div>
+            </div>
+
+            <!-- Progress Steps -->
+            <div class="progress-steps" style="margin-top:16px;">
+              <div class="step" [class.active]="currentStep === 0" [class.completed]="currentStep > 0">
+                <div class="step-circle">1</div>
+                <div class="step-label">Load</div>
+              </div>
+              <div class="step" [class.active]="currentStep === 1" [class.completed]="currentStep > 1">
+                <div class="step-circle">2</div>
+                <div class="step-label">Clean</div>
+              </div>
+              <div class="step" [class.active]="currentStep === 2" [class.completed]="currentStep > 2">
+                <div class="step-circle">3</div>
+                <div class="step-label">Generate Note</div>
+              </div>
+              <div class="step" [class.active]="currentStep === 3" [class.completed]="currentStep > 3">
+                <div class="step-circle">4</div>
+                <div class="step-label">Complete</div>
+              </div>
+            </div>
+
+            <!-- Action Button -->
+            <button class="btn btn-primary btn-lg" style="margin-top:24px;" (click)="processTranscriptText()" [disabled]="isTranscribing || !rawTranscription">
+              <span *ngIf="isTranscribing" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right:8px;"></span>
+              <i class="fas" [ngClass]="isTranscribing ? 'fa-hourglass-half' : 'fa-play'"></i>
+              {{ isTranscribing ? 'Processing...' : 'Generate Note' }}
+            </button>
+
+            <!-- Processing Status -->
+            <div *ngIf="isTranscribing" class="alert alert-warning" style="margin-top: 16px;">
+              <i class="fas fa-cog fa-spin"></i>
+              <strong>Processing Transcript...</strong>
+              <div style="margin-top: 8px;">
+                <span *ngIf="currentStep === 0">Loading transcript...</span>
+                <span *ngIf="currentStep === 1">Cleaning transcript...</span>
+                <span *ngIf="currentStep === 2">Generating medical note...</span>
+                <span *ngIf="currentStep === 3">Finalizing results...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Results Section (re-using existing variables) -->
+        <div class="results-section" *ngIf="showResults" style="margin-top:32px;">
+          <div class="result-box">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="fas fa-file-alt"></i> Raw Transcription
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(rawTranscription)">
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" (click)="downloadText(rawTranscription, 'raw-transcription.txt')">
+                  <i class="fas fa-download"></i>
+                </button>
+              </div>
+            </div>
+            <div class="result-content">
+              <p>{{rawTranscription || 'Transcription will appear here...'}}</p>
+            </div>
+          </div>
+
+          <div class="result-box">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="fas fa-broom"></i> Cleaned Transcription
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(cleanedTranscription)">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="result-content">
+              <p>{{cleanedTranscription || 'Cleaned transcription with corrected medical terminology...'}}</p>
+            </div>
+          </div>
+
+          <div class="result-box">
+            <div class="result-header">
+              <div class="result-title">
+                <i class="fas fa-notes-medical"></i> Generated Medical Note
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-primary btn-sm" (click)="editNote()">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" (click)="copyToClipboard(generatedNote)">
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" (click)="downloadText(generatedNote, 'medical-note.txt')">
+                  <i class="fas fa-download"></i>
+                </button>
+              </div>
+            </div>
+            <div class="result-content">
+              <div [innerHTML]="generatedNote || '<h4>SOAP Note</h4><p><strong>Subjective:</strong> Patient reports...</p><p><strong>Objective:</strong> Vital signs...</p><p><strong>Assessment:</strong> Clinical impression...</p><p><strong>Plan:</strong> Treatment recommendations...</p>'"></div>
+            </div>
+          </div>
         </div>
       </div>
 

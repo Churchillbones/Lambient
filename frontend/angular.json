@@ -29,5 +29,8 @@
       }
     }
   },
-  "defaultProject": "ambient-scribe-ui"
+  "defaultProject": "ambient-scribe-ui",
+  "cli": {
+    "analytics": false
+  }
 }

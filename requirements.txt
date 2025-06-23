@@ -37,3 +37,4 @@ psutil>=5.9.0
 # Additional dependencies
 python-multipart
 pydantic-settings
+pytest

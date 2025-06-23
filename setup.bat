@@ -242,11 +242,12 @@ if not exist ".env" (
     (
         echo # Azure OpenAI API settings
         echo AZURE_API_KEY=
-        echo AZURE_ENDPOINT=https://your-resource-name.openai.azure.com/
+        echo AZURE_ENDPOINT=
+        echo AZURE_EMBEDDING_ENDPOINT=
         echo MODEL_NAME=gpt-4o
         echo 
         echo # Local model settings (optional)
-        echo LOCAL_MODEL_API_URL=http://localhost:8000/generate_note
+        echo LOCAL_MODEL_API_URL=http://localhost:8001/generate_note
         echo 
         echo # Debug settings
         echo DEBUG_MODE=False
