@@ -203,6 +203,12 @@ app_data/models/vosk-model*/
 app_data/whisper_models/
 *.pt
 
+# FFMPEG binaries (large and platform-specific)
+ffmpeg/
+ffmpeg/bin/
+*.exe
+*.dll
+
 # Logs
 logs/
 *.log
@@ -229,6 +235,10 @@ secrets.json
 *.key
 *.pem
 *.crt
+.env
+.env.*
+*/app_data/keys/
+*/app_data/keys/*
 
 # API keys and credentials (be extra careful)
 *api_key*
