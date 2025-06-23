@@ -198,6 +198,10 @@ models/
 *.model
 vosk-model*/
 whisper-models/
+app_data/models/
+app_data/models/vosk-model*/
+app_data/whisper_models/
+*.pt
 
 # Logs
 logs/
